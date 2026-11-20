@@ -1,0 +1,410 @@
+/* =========================================================
+   校园智能失物招领匹配系统 V2 · 全局样式
+   ========================================================= */
+
+:root {
+  --ink: #101828;
+  --ink-2: #344054;
+  --muted: #667085;
+  --line: #e9ecf3;
+  --line-strong: #d8dfeb;
+  --bg: #f4f6fb;
+  --surface: #ffffff;
+
+  --primary: #4f46e5;
+  --primary-2: #7c3aed;
+  --primary-soft: #eef0ff;
+  --cyan: #06b6d4;
+
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+
+  --radius: 16px;
+  --radius-sm: 10px;
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05);
+  --shadow: 0 8px 24px -12px rgba(16, 24, 40, 0.18);
+  --shadow-lg: 0 24px 48px -24px rgba(16, 24, 40, 0.28);
+
+  /* Element Plus 主题对齐 */
+  --el-color-primary: #4f46e5;
+  --el-color-primary-light-3: #7c74ec;
+  --el-color-primary-light-5: #9c96f1;
+  --el-color-primary-light-7: #c3bff7;
+  --el-color-primary-light-8: #d7d5fa;
+  --el-color-primary-light-9: #eceafd;
+  --el-color-primary-dark-2: #4239c9;
+  --el-border-radius-base: 10px;
+  --el-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--el-font-family);
+  -webkit-font-smoothing: antialiased;
+  font-size: 14px;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #d3d9e6;
+  border-radius: 8px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #bcc5d6;
+  background-clip: content-box;
+}
+
+/* ---------------- 页面骨架 ---------------- */
+.page {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 30px 32px 56px;
+}
+
+.page-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.page-title {
+  font-size: 25px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  margin: 0 0 6px;
+  color: var(--ink);
+}
+
+.page-sub {
+  font-size: 13.5px;
+  color: var(--muted);
+  margin: 0;
+  line-height: 1.6;
+}
+
+.crumb {
+  font-size: 12.5px;
+  color: var(--muted);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ---------------- 卡片 ---------------- */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
+.panel-pad {
+  padding: 22px 24px;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--line);
+}
+
+.panel-title {
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+}
+
+.panel-title::before {
+  content: '';
+  width: 3px;
+  height: 15px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, var(--primary), var(--primary-2));
+}
+
+.panel-hint {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* ---------------- 统计卡 ---------------- */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.stat-card {
+  position: relative;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 20px 22px;
+  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow);
+  border-color: #dfe4f0;
+}
+
+.stat-label {
+  font-size: 12.5px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 10px;
+}
+
+.stat-value {
+  font-size: 30px;
+  font-weight: 720;
+  letter-spacing: -1px;
+  line-height: 1;
+  color: var(--ink);
+}
+
+.stat-value small {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  margin-left: 4px;
+  letter-spacing: 0;
+}
+
+.stat-bar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 3px;
+  width: 100%;
+  background: linear-gradient(90deg, var(--primary), var(--primary-2));
+  opacity: 0.9;
+}
+
+/* ---------------- 标签 / 徽章 ---------------- */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 550;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.chip-soft {
+  background: #f2f4f9;
+  color: var(--ink-2);
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+
+/* 相似度分级 */
+.level-high {
+  background: #e7f8f1;
+  color: #07835c;
+}
+.level-mid {
+  background: #fff4e0;
+  color: #b26a00;
+}
+.level-low {
+  background: #f1f3f8;
+  color: #5a667d;
+}
+
+/* ---------------- 空状态 ---------------- */
+.empty {
+  padding: 62px 20px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.empty-icon {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 14px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, var(--primary-soft), #f7f5ff);
+  color: var(--primary);
+  font-size: 24px;
+}
+
+/* ---------------- 动画 ---------------- */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.rise {
+  animation: rise 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ---------------- Element Plus 局部微调 ---------------- */
+.el-button {
+  font-weight: 550;
+}
+
+.el-card {
+  border-radius: var(--radius);
+}
+
+.el-form-item__label {
+  font-weight: 550;
+  color: var(--ink-2);
+}
+
+.el-input__wrapper,
+.el-select__wrapper,
+.el-textarea__inner {
+  border-radius: var(--radius-sm);
+  box-shadow: 0 0 0 1px var(--line-strong) inset;
+}
+
+.el-input__wrapper.is-focus,
+.el-textarea__inner:focus {
+  box-shadow: 0 0 0 1px var(--primary) inset !important;
+}
+
+.el-radio-button__inner {
+  font-weight: 550;
+}
+
+.el-tag {
+  border-radius: 7px;
+  font-weight: 550;
+}
+
+@media (max-width: 1080px) {
+  .stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .page {
+    padding: 22px 18px 48px;
+  }
+}
+
+/* ---------------- 手机竖屏适配 ---------------- */
+@media (max-width: 640px) {
+  .page {
+    padding: 14px 12px 40px;
+  }
+
+  /* 标题区改为竖向堆叠：横排时标题列会被挤成每行两三个字 */
+  .page-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .page-title {
+    font-size: 21px;
+    margin-bottom: 4px;
+    word-break: keep-all;
+  }
+
+  .page-sub {
+    font-size: 12.5px;
+    line-height: 1.55;
+  }
+
+  .crumb {
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+
+  /* 按钮组允许换行，避免撑破容器 */
+  .head-actions,
+  .page-head .el-button + .el-button {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .head-actions .el-button {
+    margin-left: 0;
+    flex: 1;
+  }
+
+  .stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+
+  .stat-card {
+    padding: 14px 14px;
+  }
+
+  /* 表格类内容允许横向滚动，不挤爆布局 */
+  .el-table,
+  .table-wrap {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* 弹窗/表单在手机上去掉过大的内边距 */
+  .el-dialog {
+    width: 92% !important;
+  }
+
+  .el-form-item__label {
+    font-size: 12.5px;
+  }
+}
