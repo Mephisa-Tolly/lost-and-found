@@ -9,7 +9,7 @@ const auth = useAuthStore()
 
 const form = ref({ username: '', password: '' })
 const formRef = ref()
-const tips = ref(true)
+const tips = ref(false)
 
 const rules = {
   username: [{ required: true, message: '请输入账号', trigger: 'blur' }],
@@ -79,7 +79,8 @@ onMounted(() => {
       </el-form>
 
       <div class="foot">
-        <span class="link" @click="tips = !tips">{{ tips ? '收起演示账号' : '查看演示账号' }}</span>
+        <span class="link" @click="tips = !tips">去注册</span>
+        <span class="tip">（演示系统暂未开放注册）</span>
       </div>
 
       <div v-if="tips" class="demo">

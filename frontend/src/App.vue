@@ -117,7 +117,7 @@ async function handleLogout() {
         </div>
         <div class="brand-text">
           <div class="brand-name">失物招领</div>
-          <div class="brand-sub">Campus Match · V3</div>
+          <div class="brand-sub">Campus Match · V3.0</div>
         </div>
       </div>
 
@@ -142,7 +142,7 @@ async function handleLogout() {
           <span class="dot" style="color:#10b981" />
           已连接后端服务
         </div>
-        <div class="version">v3.0.0 · {{ auth.isAdmin ? '管理端' : '用户端' }}</div>
+        <div class="version">v3.0 · {{ auth.isAdmin ? '管理端' : '用户端' }}</div>
       </div>
     </aside>
 

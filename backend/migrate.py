@@ -1,4 +1,4 @@
-"""为已存在的 lost_found.db 补齐 V2 新增字段（幂等，可重复执行）"""
+"""为已存在的 lost_found.db 补齐 V3.0 新增字段（幂等，可重复执行）"""
 import sqlite3, os
 
 DB = "lost_found.db"

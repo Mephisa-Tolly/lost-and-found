@@ -95,8 +95,8 @@ router.beforeEach((to) => {
 
 router.afterEach((to) => {
   document.title = to.meta?.title
-    ? `${to.meta.title} · 校园失物招领 V3`
-    : '校园智能失物招领匹配系统 · V3'
+    ? `${to.meta.title} · 校园失物招领 V3.0`
+    : '校园智能失物招领匹配系统 · V3.0'
 })
 
 export default router
