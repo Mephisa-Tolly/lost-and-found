@@ -80,7 +80,8 @@ onMounted(async () => {
 <style scoped>
 .grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  /* minmax(0, 1fr)：列宽必须允许收缩，否则卡片内容会把整列撑出视口 */
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
   min-height: 180px;
 }
@@ -236,7 +237,15 @@ onMounted(async () => {
 
 @media (max-width: 1200px) {
   .grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  /* 手机竖屏两列放不下：卡片里有分数环 + 物品摘要，最小需要 300px */
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
   }
 }
 </style>

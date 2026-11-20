@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useItemStore } from '@/store/items'
@@ -13,19 +13,41 @@ const store = useItemStore()
 const item = computed(() => store.current)
 const isLost = computed(() => item.value?.type === 'lost')
 
+// 招领帖 → 认领申请；寻物帖 → 提供线索。两者共用同一张 claims 表，靠 kind 区分。
+const actionKind = computed(() => (isLost.value ? 'clue' : 'claim'))
+const actionTitle = computed(() => (isLost.value ? '提交线索' : '申请认领'))
+
 const claimVisible = ref(false)
 const claimForm = ref({ applicant: '', answers: '' })
 const submitting = ref(false)
 const loadError = ref('')
 
-onMounted(async () => {
+onMounted(() => load(route.params.id))
+
+// 同一条路由内切换帖子（如从候选跳回详情）时组件不会重建，
+// 不监听参数就会一直显示上一条帖子，是很容易踩的坑。
+watch(
+  () => route.params.id,
+  (id, old) => {
+    if (id && id !== old) load(id)
+  },
+)
+
+async function load(id) {
+  loadError.value = ''
+  claimVisible.value = false
   try {
-    await store.loadItem(route.params.id)
+    await store.loadItem(id)
     if (!store.current) loadError.value = '未找到该物品记录'
   } catch (e) {
     loadError.value = '未找到该物品记录，可能已被删除或链接有误'
   }
-})
+}
+
+function openAction() {
+  claimForm.value = { applicant: '', answers: '' }
+  claimVisible.value = true
+}
 
 const metaRows = computed(() => {
   const it = item.value
@@ -42,14 +64,22 @@ const metaRows = computed(() => {
 
 async function submitClaim() {
   if (!claimForm.value.answers.trim()) {
-    ElMessage.warning('必须填写私密特征核验答案')
+    ElMessage.warning(isLost.value ? '请填写你掌握的线索' : '必须填写私密特征核验答案')
     return
   }
   submitting.value = true
   try {
-    await createClaim(item.value.item_id, claimForm.value)
+    await createClaim(item.value.item_id, {
+      applicant: claimForm.value.applicant,
+      answers: claimForm.value.answers,
+      kind: actionKind.value,
+    })
     claimVisible.value = false
-    ElMessage.success('认领申请已提交，等待拾得者确认与管理员二次核验')
+    ElMessage.success(
+      isLost.value
+        ? '线索已提交，管理员核实后会联系你与失主'
+        : '认领申请已提交，等待管理员二次核验',
+    )
   } finally {
     submitting.value = false
   }
@@ -139,17 +169,31 @@ async function submitClaim() {
             <el-button type="primary" size="large" class="block" @click="router.push(`/items/${item.item_id}/matches`)">
               <el-icon><MagicStick /></el-icon>&nbsp;查看 AI 匹配候选
             </el-button>
-            <el-button v-if="!isLost" size="large" class="block" @click="claimVisible = true">
+            <el-button v-if="!isLost" size="large" class="block" @click="openAction">
               <el-icon><Tickets /></el-icon>&nbsp;这是我要找的，申请认领
             </el-button>
+            <el-button v-else size="large" class="block" @click="openAction">
+              <el-icon><ChatLineSquare /></el-icon>&nbsp;此物品我知晓线索，提交线索
+            </el-button>
             <p class="action-tip">
-              AI 只给出候选，不判定归属。确认候选后仍需私密特征核验、拾得者确认与管理员二次核验。
+              <template v-if="isLost">
+                AI 只给出候选，不判定归属。如果你看到或捡到了这件东西，可以直接提交线索，由管理员核实后联系失主。
+              </template>
+              <template v-else>
+                AI 只给出候选，不判定归属。确认候选后仍需私密特征核验与管理员二次核验。
+              </template>
             </p>
           </section>
 
           <section class="panel flow-card">
-            <h3>认领流程</h3>
-            <ol class="flow">
+            <h3>{{ isLost ? '线索处理流程' : '认领流程' }}</h3>
+            <ol v-if="isLost" class="flow">
+              <li><span>1</span>提交你掌握的线索</li>
+              <li><span>2</span>管理员核实线索</li>
+              <li><span>3</span>管理员通知失主</li>
+              <li><span>4</span>双方核对后交接物品</li>
+            </ol>
+            <ol v-else class="flow">
               <li><span>1</span>提交认领申请并回答私密特征</li>
               <li><span>2</span>拾得者初步确认</li>
               <li><span>3</span>管理员二次核验</li>
@@ -166,30 +210,53 @@ async function submitClaim() {
       <el-button plain style="margin-top: 16px" @click="router.push('/items')">返回信息池</el-button>
     </div>
 
-    <el-dialog v-model="claimVisible" title="申请认领" width="480" align-center>
+    <el-dialog v-model="claimVisible" :title="actionTitle" width="480" align-center>
       <el-form label-position="top">
         <el-form-item label="你的称呼">
           <el-input v-model="claimForm.applicant" placeholder="选填，默认匿名申请人" />
         </el-form-item>
-        <el-form-item label="私密特征核验（必填）">
+        <el-form-item v-if="isLost" label="线索描述（必填）">
+          <el-input
+            v-model="claimForm.answers"
+            type="textarea"
+            :rows="4"
+            maxlength="300"
+            show-word-limit
+            placeholder="例如：11月20日下午在图书馆三楼自习区捡到一个蓝色保温杯，杯身有贴纸，目前由我保管"
+          />
+        </el-form-item>
+        <el-form-item v-else label="私密特征核验（必填）">
           <el-input
             v-model="claimForm.answers"
             type="textarea"
             :rows="3"
+            maxlength="300"
+            show-word-limit
             placeholder="请描述只有物主才知道的细节，例如：杯底左侧有磕碰、贴着小熊贴纸"
           />
         </el-form-item>
         <el-alert
+          v-if="isLost"
+          type="info"
+          :closable="false"
+          show-icon
+          title="线索仅管理员可见"
+          description="请尽量写清时间、地点与物品特征，方便失主确认。管理员核实后会联系双方。"
+        />
+        <el-alert
+          v-else
           type="info"
           :closable="false"
           show-icon
           title="答错将被驳回"
-          description="核验答案仅拾得者与管理员可见，失主端不展示标准答案。"
+          description="核验答案仅管理员可见，发布者端不展示标准答案。"
         />
       </el-form>
       <template #footer>
         <el-button @click="claimVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="submitClaim">提交申请</el-button>
+        <el-button type="primary" :loading="submitting" @click="submitClaim">
+          {{ isLost ? '提交线索' : '提交申请' }}
+        </el-button>
       </template>
     </el-dialog>
   </div>
@@ -408,6 +475,39 @@ async function submitClaim() {
   }
   .right {
     position: static;
+  }
+}
+
+@media (max-width: 640px) {
+  /* 三列在手机上每列不足 100px，时间会被拆成两行 */
+  .meta-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px 14px;
+  }
+
+  .hero {
+    padding: 18px 16px 16px;
+  }
+
+  .hero-top {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+
+  .hero-top h1 {
+    font-size: 19px;
+    flex: 1 1 100%;
+    order: 3;
+  }
+
+  .status-chip {
+    margin-left: 0;
+  }
+
+  .item-img {
+    width: calc(50% - 5px);
+    height: auto;
+    aspect-ratio: 1;
   }
 }
 </style>

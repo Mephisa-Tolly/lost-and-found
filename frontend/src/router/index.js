@@ -63,7 +63,7 @@ const routes = [
     path: '/admin/claims',
     name: 'AdminClaims',
     component: () => import('@/views/AdminClaims.vue'),
-    meta: { title: '认领审核', group: '管理端', role: 'admin' },
+    meta: { title: '认领与线索', group: '管理端', role: 'admin' },
   },
 
   { path: '/:pathMatch(.*)*', redirect: '/square' },

@@ -77,10 +77,17 @@ function goMatches() {
       </div>
 
       <p class="desc">{{ item.description }}</p>
+    </div>
 
-      <div v-if="thumb" class="thumb-row" @click.stop>
-        <el-image :src="thumb" fit="cover" class="thumb" :preview-src-list="images" :initial-index="0" preview-teleported />
-      </div>
+    <div v-if="thumb" class="thumb-col" @click.stop>
+      <el-image
+        :src="thumb"
+        fit="cover"
+        class="thumb"
+        :preview-src-list="images"
+        :initial-index="0"
+        preview-teleported
+      />
     </div>
 
     <div class="actions">
@@ -220,17 +227,24 @@ function goMatches() {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  /* 固定两行高度：有图 / 无图的卡片因此高度一致，列表不会参差不齐 */
+  min-height: calc(1.65em * 2);
 }
 
-.thumb-row {
-  margin-top: 10px;
+/* 缩略图独立成列，不再挤在描述区右下角把文字压窄 */
+.thumb-col {
+  flex: none;
+  display: grid;
+  place-items: center;
+  padding-left: 4px;
 }
 
 .thumb {
-  width: 86px;
-  height: 86px;
-  border-radius: 8px;
+  width: 76px;
+  height: 76px;
+  border-radius: 9px;
   border: 1px solid var(--line);
+  cursor: zoom-in;
 }
 
 .actions {
@@ -280,6 +294,18 @@ function goMatches() {
   .desc {
     font-size: 12.5px;
     line-height: 1.55;
+    min-height: calc(1.55em * 2);
+  }
+
+  .thumb-col {
+    padding-left: 0;
+    align-self: flex-start;
+  }
+
+  .thumb {
+    width: 58px;
+    height: 58px;
+    border-radius: 8px;
   }
 
   /* 手机上卡片换行，把「详情 / 匹配」放到底部一行，保证手机上也能直接点匹配 */

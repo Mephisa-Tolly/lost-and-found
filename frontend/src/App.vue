@@ -47,6 +47,11 @@ const aiTip = computed(() => {
   return lines.join('\n')
 })
 
+// 顶栏接口标签：点开是 FastAPI 自带的 Swagger 文档（以前只是个不可点的假标签，点了必 404）
+const docsUrl = API_BASE.startsWith('http')
+  ? `${API_BASE.replace(/\/api\/v1\/?$/, '')}/docs`
+  : '/docs'
+
 const navGroups = computed(() => {
   if (auth.isAdmin) {
     return [
@@ -55,7 +60,7 @@ const navGroups = computed(() => {
         items: [
           { to: '/admin', title: '信息管理', icon: 'Files', match: '/admin' },
           { to: '/matches', title: '待确认匹配', icon: 'MagicStick', match: '/matches' },
-          { to: '/admin/claims', title: '认领审核', icon: 'DocumentChecked', match: '/admin/claims' },
+          { to: '/admin/claims', title: '认领与线索', icon: 'DocumentChecked', match: '/admin/claims' },
         ],
       },
     ]
@@ -154,7 +159,15 @@ async function handleLogout() {
           <span class="topbar-title">{{ currentTitle }}</span>
         </div>
         <div class="topbar-right">
-          <div class="pill pill-api"><el-icon><Link /></el-icon> {{ API_BASE }}</div>
+          <a
+            class="pill pill-api"
+            :href="docsUrl"
+            target="_blank"
+            rel="noopener"
+            title="打开接口文档（Swagger）"
+          >
+            <el-icon><Document /></el-icon> 接口文档
+          </a>
           <el-tooltip :content="aiTip" placement="bottom">
             <div class="pill" :class="aiEnabled ? 'pill-ai-on' : 'pill-ai-off'">
               <span class="ai-dot" /> {{ aiLabel }}
@@ -378,6 +391,17 @@ async function handleLogout() {
   border: 1px solid var(--line);
   border-radius: 999px;
   padding: 5px 11px;
+}
+
+.pill-api {
+  color: var(--muted);
+  text-decoration: none;
+  transition: color 0.16s ease, border-color 0.16s ease;
+}
+
+.pill-api:hover {
+  color: var(--primary);
+  border-color: #d9dbf5;
 }
 
 .pill-ai-on {

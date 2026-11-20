@@ -93,6 +93,9 @@ function toBackendItem(payload) {
     brand: payload.brand || null,
     images: Array.isArray(payload.images) ? payload.images : [],
     anonymous: !!payload.anonymous,
+    // 这两项以前被这一层吃掉了：表单填了也送不到后端，认领核验因此没有标准答案
+    contact: payload.contact || '',
+    private_features: payload.private_features || '',
     created_by: 1,
   }
 }
@@ -197,25 +200,27 @@ export function ignoreMatch(matchId) {
   return request.patch(`/matches/${matchId}/confirm`, { status: '已拒绝' })
 }
 
-/** 提交认领申请 */
+/** 提交认领申请（found）/ 提交线索（lost），由后端按物品类型与 kind 双向校验 */
 export function createClaim(itemId, payload) {
   return request.post(`/items/${itemId}/claims`, {
     applicant: payload?.applicant || '匿名用户',
     answers: payload?.answers || '',
+    kind: payload?.kind || 'claim',
   })
 }
 
 /* ============ 认领申请（V3.0） ============ */
 
-/** 我的认领申请（用户端） */
+/** 我的认领申请 / 线索（用户端） */
 export function fetchMyClaims() {
   return request.get('/claims/mine')
 }
 
-/** 全部认领申请（管理端） */
+/** 全部认领申请（管理端）。kind: claim 认领 / clue 线索 / 不传 全部 */
 export function fetchAdminClaims(params = {}) {
   const query = {}
   if (params.status && params.status !== 'all') query.status = params.status
+  if (params.kind && params.kind !== 'all') query.kind = params.kind
   if (params.keyword) query.keyword = params.keyword
   return request.get('/admin/claims', { params: query })
 }

@@ -1,7 +1,7 @@
 <script setup>
 /**
  * 我的申请（用户端）
- * 只展示当前登录用户自己提交的认领申请，以及管理员给出的审核结果。
+ * 展示当前用户提交的认领申请（招领帖）与线索（寻物帖），以及管理员给出的处理结果。
  */
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
@@ -50,11 +50,11 @@ onMounted(load)
         <div class="crumb">
           <span>我的</span>
           <el-icon><ArrowRight /></el-icon>
-          <span>认领申请</span>
+          <span>我的申请</span>
         </div>
         <h1 class="page-title">我的申请</h1>
         <p class="page-sub">
-          这里是你提交过的认领申请。管理员审核后会显示结果，通过即表示物品归你。
+          这里是你提交过的认领申请与线索。管理员处理后会显示结果，认领通过即表示物品归你。
         </p>
       </div>
       <div class="head-actions">
@@ -67,7 +67,7 @@ onMounted(load)
     <div class="stat-grid">
       <div class="stat-card">
         <div class="stat-num">{{ stat.total }}</div>
-        <div class="stat-label">申请总数</div>
+        <div class="stat-label">提交总数</div>
       </div>
       <div class="stat-card">
         <div class="stat-num warn">{{ stat.pending }}</div>
@@ -99,6 +99,9 @@ onMounted(load)
       <template v-if="shown.length">
         <article v-for="c in shown" :key="c.claim_id" class="claim-card">
           <div class="c-head">
+            <span class="c-kind" :class="c.kind === 'clue' ? 'clue' : 'claim'">
+              {{ c.kind === 'clue' ? '线索' : '认领' }}
+            </span>
             <span class="c-title">{{ c.item.title }}</span>
             <span class="c-tag" :style="{
               color: statusStyle(c.status).color,
@@ -111,13 +114,17 @@ onMounted(load)
             <span><el-icon><Clock /></el-icon>提交于 {{ String(c.created_at).slice(0, 16) }}</span>
           </div>
           <div class="c-block">
-            <span class="c-label">你填写的核验特征</span>
+            <span class="c-label">{{ c.kind === 'clue' ? '你提交的线索' : '你填写的核验特征' }}</span>
             <p class="c-text">{{ c.answers }}</p>
           </div>
           <div v-if="c.status !== '待核验'" class="c-review" :class="c.passed ? 'ok' : 'no'">
             <div class="c-review-head">
               <el-icon><component :is="c.passed ? 'CircleCheckFilled' : 'CircleCloseFilled'" /></el-icon>
-              <span>管理员审核结果：{{ c.passed ? '通过' : '不通过' }}</span>
+              <span>
+                管理员处理结果：{{ c.kind === 'clue'
+                  ? (c.passed ? '已采纳' : '已忽略')
+                  : (c.passed ? '通过' : '不通过') }}
+              </span>
               <span v-if="c.reviewed_at" class="c-time">{{ String(c.reviewed_at).slice(0, 16) }}</span>
             </div>
             <p v-if="c.review_note" class="c-note">说明：{{ c.review_note }}</p>
@@ -125,15 +132,16 @@ onMounted(load)
           </div>
           <div v-else class="c-wait">
             <el-icon><Clock /></el-icon>
-            管理员还未审核，请耐心等待。审核结果会显示在这里。
+            {{ c.kind === 'clue' ? '管理员还未核实线索，请耐心等待。' : '管理员还未审核，请耐心等待。' }}
+            处理结果会显示在这里。
           </div>
         </article>
       </template>
       <div v-else-if="!loading" class="panel empty">
         <div class="empty-icon"><el-icon><Document /></el-icon></div>
-        <div>{{ filter === 'all' ? '你还没有提交过认领申请' : '这个状态下没有申请' }}</div>
+        <div>{{ filter === 'all' ? '你还没有提交过认领申请或线索' : '这个状态下没有记录' }}</div>
         <div class="empty-sub">
-          在广场找到自己的东西，点进详情页填写私密特征，就能提交认领申请。
+          招领帖可以提交认领申请，寻物帖可以提供线索，入口都在物品详情页。
         </div>
         <el-button type="primary" plain style="margin-top: 14px" @click="router.push('/square')">
           去广场看看
@@ -147,6 +155,24 @@ onMounted(load)
 .head-actions {
   display: flex;
   gap: 10px;
+}
+
+.c-kind {
+  flex: none;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 5px;
+}
+
+.c-kind.claim {
+  color: #1d4ed8;
+  background: #e8eeff;
+}
+
+.c-kind.clue {
+  color: #0e9384;
+  background: #e8f8f4;
 }
 
 .stat-num.warn {

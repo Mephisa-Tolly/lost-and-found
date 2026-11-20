@@ -347,4 +347,64 @@ const srcTip = computed(() => {
   height: auto;
   padding: 7px 6px;
 }
+
+/* 手机 / 窄屏：横向三段（序号 · 环形分数 · 正文 · 操作）放不下，
+   正文与操作改为上下两行，操作按钮横排等宽。 */
+@media (max-width: 860px) {
+  .cand {
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 15px 14px 15px 20px;
+  }
+
+  .rank {
+    left: -7px;
+    top: 14px;
+  }
+
+  .ring {
+    padding-top: 0;
+    /* 与正文顶部对齐，否则环形分数会悬在卡片中下部，看起来像错位 */
+    align-self: flex-start;
+  }
+
+  .body {
+    flex: 1 1 calc(100% - 90px);
+  }
+
+  /* 标题独占一行，标签与来源徽标排到下一行，避免相互挤压 */
+  .line-1 {
+    flex-wrap: wrap;
+    row-gap: 7px;
+    margin-bottom: 8px;
+  }
+
+  .line-1 h4 {
+    order: -1;
+    flex: 1 1 100%;
+    white-space: normal;
+    font-size: 14.5px;
+    line-height: 1.4;
+  }
+
+  .src {
+    margin-left: 0;
+  }
+
+  .ops {
+    flex: 1 1 100%;
+    width: auto;
+    flex-direction: row;
+    gap: 8px;
+    margin-top: 2px;
+  }
+
+  .ops :deep(.el-button) {
+    flex: 1;
+  }
+
+  .decided-tag {
+    flex: 1;
+  }
+}
 </style>

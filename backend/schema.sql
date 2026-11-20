@@ -60,6 +60,8 @@ CREATE TABLE IF NOT EXISTS claims (
     applicant_id INTEGER NOT NULL,
     applicant_name VARCHAR(50) DEFAULT 'user',
     answers TEXT NOT NULL,
+    -- claim=失主对招领帖提交认领申请 / clue=知情人对寻物帖提交线索
+    kind VARCHAR(10) NOT NULL DEFAULT 'claim' CHECK(kind IN ('claim', 'clue')),
     status VARCHAR(20) NOT NULL DEFAULT '待核验' CHECK(status IN ('待核验', '已通过', '已拒绝', '已完成')),
     review_note TEXT,
     reviewed_at DATETIME,

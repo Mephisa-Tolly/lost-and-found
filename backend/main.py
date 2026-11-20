@@ -226,6 +226,8 @@ def ensure_db():
                 ("applicant_name", "ALTER TABLE claims ADD COLUMN applicant_name VARCHAR(50) DEFAULT 'user'"),
                 ("review_note", "ALTER TABLE claims ADD COLUMN review_note TEXT"),
                 ("reviewed_at", "ALTER TABLE claims ADD COLUMN reviewed_at DATETIME"),
+                # 线索功能：老库里的申请一律视为认领申请
+                ("kind", "ALTER TABLE claims ADD COLUMN kind VARCHAR(10) NOT NULL DEFAULT 'claim'"),
             ):
                 if name not in ccols:
                     conn.execute(ddl)
@@ -502,6 +504,8 @@ class ItemCreate(BaseModel):
     brand: Optional[str] = None
     images: Optional[List[str]] = None   # data:image/...;base64 字符串数组，最多 3 张
     anonymous: bool = False
+    contact: Optional[str] = None          # 联系方式，默认隐藏，双方确认后可见
+    private_features: Optional[str] = None # 私密特征，仅用于认领核验，不公开展示
     created_by: int = 1 # 默认测试用户ID
 
     @field_validator("type")
@@ -560,6 +564,19 @@ class ItemCreate(BaseModel):
             return ""
         if len(v) > 30:
             raise ValueError("颜色/品牌最多 30 字")
+        return html.escape(v, quote=True)
+
+    @field_validator("contact", "private_features")
+    @classmethod
+    def _check_private_text(cls, v, info):
+        """联系方式与私密特征：选填，但长度要收口，且入库前转义。"""
+        v = (v or "").strip()
+        if not v:
+            return ""
+        is_contact = info.field_name == "contact"
+        limit = 60 if is_contact else 200
+        if len(v) > limit:
+            raise ValueError(f"{'联系方式' if is_contact else '私密特征'}最多 {limit} 字")
         return html.escape(v, quote=True)
 
     @field_validator("images")
@@ -689,11 +706,14 @@ def create_item(item: ItemCreate):
                 raise
         images_json = json.dumps(saved_urls, ensure_ascii=False)
         # 校验状态机：默认初始状态为"待匹配"
+        # contact_encrypted / private_features 只对管理员可见，列表与详情接口已做过滤
         cursor.execute("""
-            INSERT INTO items (type, title, category, location, time, description, color, brand, images, anonymous, status, sensitive_level, created_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '待匹配', ?, ?)
+            INSERT INTO items (type, title, category, location, time, description, color, brand, images,
+                               anonymous, status, sensitive_level, contact_encrypted, private_features, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '待匹配', ?, ?, ?, ?)
         """, (item.type, item.title, item.category, item.location, item.time, 
-              item.description, item.color, item.brand, images_json, item.anonymous, sensitive, item.created_by))
+              item.description, item.color, item.brand, images_json, item.anonymous, sensitive,
+              item.contact or "", item.private_features or "", item.created_by))
         conn.commit()
         item_id = cursor.lastrowid
 
@@ -1207,6 +1227,8 @@ def confirm_match(match_id: int, req: MatchConfirm, authorization: Optional[str]
 class ClaimCreate(BaseModel):
     applicant: Optional[str] = "匿名用户"
     answers: Optional[str] = ""
+    # claim=对招领帖申请认领 / clue=对寻物帖提交线索；不传则按物品类型自动判定
+    kind: Optional[str] = None
 
 
 class ClaimReview(BaseModel):
@@ -1216,33 +1238,49 @@ class ClaimReview(BaseModel):
 
 @app.post("/api/v1/items/{item_id}/claims")
 def create_claim(item_id: int, claim: ClaimCreate, authorization: Optional[str] = Header(None)):
-    """提交认领申请（需填写私密特征核验答案）"""
+    """招领帖 → 提交认领申请；寻物帖 → 提交线索。两者共用 claims 表，靠 kind 区分。"""
     if not claim.answers or not str(claim.answers).strip():
-        return api_response(400, "必须填写私密特征核验答案")
+        return api_response(400, "必须填写核验内容：认领需填私密特征，线索需描述你掌握的情况")
     me = _current_user(authorization) or {}
     if me.get("role") == "admin":
         return api_response(400, "管理员账号不参与认领申请")
     applicant_name = me.get("username") or "user"
+
+    kind = (claim.kind or "").strip().lower()
+    if kind not in ("claim", "clue"):
+        kind = ""
+
     conn = get_db()
     cursor = conn.cursor()
     try:
-        cursor.execute("SELECT item_id, status FROM items WHERE item_id = ?", (item_id,))
+        cursor.execute("SELECT item_id, type, status FROM items WHERE item_id = ?", (item_id,))
         row = cursor.fetchone()
         if not row:
             return api_response(404, "物品不存在")
-        # 同一用户对同一物品只保留一条待核验申请，避免连点提交出多条
+
+        # 类型与动作必须对齐：招领帖只能认领，寻物帖只能提供线索。
+        if not kind:
+            kind = "clue" if row["type"] == "lost" else "claim"
+        if row["type"] == "lost" and kind != "clue":
+            return api_response(400, "这是寻物信息，只能提交线索，不能申请认领")
+        if row["type"] == "found" and kind != "claim":
+            return api_response(400, "这是招领信息，只能申请认领，不能提交线索")
+
+        # 同一用户对同一物品只保留一条待核验记录，避免连点提交出多条
         cursor.execute("""SELECT claim_id FROM claims
-                          WHERE item_id = ? AND applicant_name = ? AND status = '待核验'""",
-                       (item_id, applicant_name))
+                          WHERE item_id = ? AND applicant_name = ? AND kind = ? AND status = '待核验'""",
+                       (item_id, applicant_name, kind))
         dup = cursor.fetchone()
         if dup:
-            return api_response(200, "你已提交过申请，请等待管理员审核",
-                                {"claim_id": dup["claim_id"], "status": "待核验", "duplicated": True})
-        cursor.execute("""INSERT INTO claims (item_id, applicant_id, applicant_name, answers, status)
-                          VALUES (?, 1, ?, ?, '待核验')""",
-                       (item_id, applicant_name, claim.answers))
+            return api_response(200, "你已提交过，请等待管理员审核",
+                                {"claim_id": dup["claim_id"], "status": "待核验",
+                                 "kind": kind, "duplicated": True})
+        cursor.execute("""INSERT INTO claims (item_id, applicant_id, applicant_name, answers, kind, status)
+                          VALUES (?, 1, ?, ?, ?, '待核验')""",
+                       (item_id, applicant_name, claim.answers, kind))
         conn.commit()
-        return api_response(200, "认领申请已提交", {"claim_id": cursor.lastrowid, "status": "待核验"})
+        return api_response(200, "线索已提交" if kind == "clue" else "认领申请已提交",
+                            {"claim_id": cursor.lastrowid, "status": "待核验", "kind": kind})
     except Exception as e:
         conn.rollback()
         return api_response(500, f"系统异常: {str(e)}")
@@ -1251,9 +1289,9 @@ def create_claim(item_id: int, claim: ClaimCreate, authorization: Optional[str] 
 
 
 def _claim_rows(conn, where: str = "", args: tuple = ()):
-    """认领申请 + 物品摘要，用户端/管理端共用"""
+    """认领申请 / 线索 + 物品摘要，用户端/管理端共用"""
     cur = conn.cursor()
-    cur.execute(f"""SELECT c.claim_id, c.item_id, c.applicant_name, c.answers, c.status,
+    cur.execute(f"""SELECT c.claim_id, c.item_id, c.applicant_name, c.answers, c.kind, c.status,
                            c.review_note, c.reviewed_at, c.created_at,
                            i.title, i.type, i.category, i.location, i.private_features
                     FROM claims c LEFT JOIN items i ON i.item_id = c.item_id
@@ -1267,6 +1305,8 @@ def _claim_rows(conn, where: str = "", args: tuple = ()):
             "item_id": r["item_id"],
             "applicant": r["applicant_name"] or "user",
             "answers": r["answers"],
+            # 老库记录没有 kind，一律按认领申请处理
+            "kind": (r["kind"] or "claim"),
             "status": r["status"],
             "passed": r["status"] in ("已通过", "已完成"),
             "review_note": r["review_note"] or "",
@@ -1307,14 +1347,18 @@ def my_claims(authorization: Optional[str] = Header(None)):
 
 @app.get("/api/v1/admin/claims")
 def admin_claims(status: Optional[str] = None,
+                 kind: Optional[str] = None,
                  keyword: Optional[str] = None,
                  authorization: Optional[str] = Header(None)):
-    """管理端：所有用户的认领申请"""
+    """管理端：所有用户的认领申请与线索。kind=claim 只看认领，kind=clue 只看线索"""
     _require_admin(authorization)
     where, args = [], []
     if status and status != "all":
         where.append("c.status = ?")
         args.append(status)
+    if kind and kind in ("claim", "clue"):
+        where.append("COALESCE(c.kind, 'claim') = ?")
+        args.append(kind)
     if keyword:
         where.append("(i.title LIKE ? OR c.applicant_name LIKE ? OR c.answers LIKE ?)")
         kw = f"%{keyword}%"
@@ -1335,7 +1379,7 @@ def admin_claims(status: Optional[str] = None,
 @app.post("/api/v1/admin/claims/{claim_id}/review")
 def review_claim(claim_id: int, body: ClaimReview,
                  authorization: Optional[str] = Header(None)):
-    """管理端审核认领申请：通过 / 不通过"""
+    """管理端审核：认领申请 → 通过/驳回；线索 → 采纳/忽略"""
     _require_admin(authorization)
     action = (body.action or "").lower()
     if action not in ("approve", "reject"):
@@ -1343,12 +1387,13 @@ def review_claim(claim_id: int, body: ClaimReview,
     conn = get_db()
     try:
         cur = conn.cursor()
-        cur.execute("SELECT claim_id, item_id, status FROM claims WHERE claim_id = ?", (claim_id,))
+        cur.execute("SELECT claim_id, item_id, status, kind FROM claims WHERE claim_id = ?", (claim_id,))
         row = cur.fetchone()
         if not row:
             return api_response(404, "申请不存在")
         if row["status"] in ("已通过", "已拒绝", "已完成"):
-            return api_response(409, f"该申请已审核过（当前状态：{row['status']}），不能重复审核")
+            return api_response(409, f"该记录已审核过（当前状态：{row['status']}），不能重复审核")
+        is_clue = (row["kind"] or "claim") == "clue"
         new_status = "已通过" if action == "approve" else "已拒绝"
         cur.execute("""UPDATE claims
                        SET status = ?, review_note = ?, reviewed_at = ?,
@@ -1356,16 +1401,27 @@ def review_claim(claim_id: int, body: ClaimReview,
                        WHERE claim_id = ?""",
                     (new_status, (body.note or "").strip(), datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                      1 if action == "approve" else 0, claim_id))
-        # 通过后把物品标记为已认领，双向闭环
         if action == "approve":
-            cur.execute("UPDATE items SET status = '已确认' WHERE item_id = ?", (row["item_id"],))
-            # 同一物品的其他待核验申请自动作废，避免一物多认
-            cur.execute("""UPDATE claims SET status = '已拒绝', review_note = '该物品已由其他申请人认领'
-                           WHERE item_id = ? AND claim_id != ? AND status = '待核验'""",
-                        (row["item_id"], claim_id))
+            if is_clue:
+                # 线索采纳：物品进入「认领中」，等待失主与线索人线下核对。
+                # 线索之间不存在互斥关系，不能像认领那样把其他线索一并作废。
+                cur.execute("""UPDATE items SET status = '认领中'
+                               WHERE item_id = ? AND status IN ('待匹配', '已匹配')""",
+                            (row["item_id"],))
+            else:
+                # 认领通过后把物品标记为已认领，双向闭环
+                cur.execute("UPDATE items SET status = '已确认' WHERE item_id = ?", (row["item_id"],))
+                # 同一物品的其他待核验申请自动作废，避免一物多认
+                cur.execute("""UPDATE claims SET status = '已拒绝', review_note = '该物品已由其他申请人认领'
+                               WHERE item_id = ? AND claim_id != ? AND status = '待核验'
+                                 AND COALESCE(kind, 'claim') = 'claim'""",
+                            (row["item_id"], claim_id))
         conn.commit()
-        return api_response(200, f"已{'通过' if action == 'approve' else '驳回'}该申请",
-                            {"claim_id": claim_id, "status": new_status})
+        done = ("采纳" if action == "approve" else "忽略") if is_clue \
+            else ("通过" if action == "approve" else "驳回")
+        return api_response(200, f"已{done}该{'线索' if is_clue else '申请'}",
+                            {"claim_id": claim_id, "status": new_status,
+                             "kind": "clue" if is_clue else "claim"})
     except Exception as e:
         conn.rollback()
         return api_response(500, f"系统异常: {str(e)}")

@@ -345,4 +345,41 @@ function goDetail() {
   margin-top: 18px;
   border-radius: 12px;
 }
+
+@media (max-width: 860px) {
+  /* 四列统计在手机上每格只剩 40px，改成两列 */
+  .summary {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+
+  .sum-item {
+    padding: 11px 13px;
+  }
+
+  .sum-item .num {
+    font-size: 19px;
+  }
+
+  .src-bar {
+    gap: 10px;
+    padding: 13px 15px;
+  }
+
+  .q-title {
+    flex: 1 1 100%;
+    word-break: break-word;
+  }
+
+  .src-right {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .src-right .el-progress {
+    flex: 1;
+    max-width: 180px;
+  }
+}
 </style>

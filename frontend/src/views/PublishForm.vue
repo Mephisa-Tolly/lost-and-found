@@ -434,6 +434,29 @@ function goList() {
   width: 100%;
 }
 
+/* 默认 148×148 的图片卡在表单里留白过多，缩到 104 并统一圆角 */
+.upload-block :deep(.el-upload--picture-card),
+.upload-block :deep(.el-upload-list--picture-card .el-upload-list__item) {
+  width: 104px;
+  height: 104px;
+  border-radius: 10px;
+}
+
+.upload-block :deep(.el-upload--picture-card) {
+  border: 1px dashed #d6dae6;
+  background: #fbfcfe;
+}
+
+.upload-block :deep(.el-upload--picture-card:hover) {
+  border-color: var(--primary);
+}
+
+.upload-block :deep(.el-upload-list--picture-card) {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .field-tip {
   display: flex;
   align-items: center;
@@ -617,6 +640,25 @@ function goList() {
   }
   .tip-card {
     flex: 1;
+  }
+}
+
+@media (max-width: 640px) {
+  /* 手机上一行放两个输入框只剩 150px，全部改成单列 */
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .span-2 {
+    grid-column: span 1;
+  }
+
+  .form-body {
+    padding: 16px 14px 4px;
+  }
+
+  .tips {
+    flex-direction: column;
   }
 }
 </style>

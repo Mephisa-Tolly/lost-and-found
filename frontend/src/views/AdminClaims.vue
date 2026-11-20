@@ -1,7 +1,9 @@
 <script setup>
 /**
  * 认领审核（管理端）
- * 管理员查看所有用户提交的认领申请，逐条通过 / 不通过，并填写审核说明。
+ * 两个队列：
+ *   - 认领申请：失主对「招领帖」提交，核对私密特征是否吻合
+ *   - 线索：知情人对「寻物帖」提交，核实后联系失主
  */
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -14,8 +16,13 @@ const reviewing = ref(null)
 
 const status = ref('待核验')
 const keyword = ref('')
+// claim = 认领申请 / clue = 线索
+const kind = ref('claim')
+const isClue = computed(() => kind.value === 'clue')
 
 const shown = computed(() => list.value)
+
+const unitLabel = computed(() => (isClue.value ? '线索' : '申请'))
 
 function statusStyle(s) {
   return {
@@ -29,7 +36,11 @@ function statusStyle(s) {
 async function load() {
   loading.value = true
   try {
-    const data = await fetchAdminClaims({ status: status.value, keyword: keyword.value })
+    const data = await fetchAdminClaims({
+      status: status.value,
+      keyword: keyword.value,
+      kind: kind.value,
+    })
     list.value = data.list || []
     stat.value = data.stat || { total: 0, pending: 0, passed: 0, rejected: 0 }
   } catch (e) {
@@ -41,18 +52,23 @@ async function load() {
 
 async function doReview(row, action) {
   const pass = action === 'approve'
+  const clue = row.kind === 'clue'
   let note = ''
   try {
     const r = await ElMessageBox.prompt(
       pass
-        ? `确认「${row.applicant}」对《${row.item.title}》的认领申请通过？通过后该物品标记为已确认，同物品的其他待审申请自动作废。`
-        : `驳回「${row.applicant}」对《${row.item.title}》的申请？请填写驳回原因，用户会在「我的申请」里看到。`,
-      pass ? '通过申请' : '不通过',
+        ? clue
+          ? `采纳「${row.applicant}」对《${row.item.title}》提交的线索？采纳后该寻物帖进入「认领中」，请线下联系双方核对物品。`
+          : `确认「${row.applicant}」对《${row.item.title}》的认领申请通过？通过后该物品标记为已确认，同物品的其他待审申请自动作废。`
+        : clue
+          ? `忽略「${row.applicant}」提交的线索？请填写原因，用户会在「我的申请」里看到。`
+          : `驳回「${row.applicant}」对《${row.item.title}》的申请？请填写驳回原因，用户会在「我的申请」里看到。`,
+      pass ? (clue ? '采纳线索' : '通过申请') : clue ? '忽略线索' : '不通过',
       {
-        confirmButtonText: pass ? '确认通过' : '确认驳回',
+        confirmButtonText: pass ? (clue ? '确认采纳' : '确认通过') : clue ? '确认忽略' : '确认驳回',
         cancelButtonText: '取消',
-        inputPlaceholder: pass ? '可选：填写核验说明' : '请填写驳回原因（必填）',
-        inputValidator: (v) => (pass ? true : (v && v.trim() ? true : '驳回必须填写原因')),
+        inputPlaceholder: pass ? '可选：填写核实说明' : '请填写原因（必填）',
+        inputValidator: (v) => (pass ? true : (v && v.trim() ? true : '必须填写原因')),
         type: pass ? 'success' : 'warning',
         inputValue: '',
       },
@@ -65,13 +81,20 @@ async function doReview(row, action) {
   reviewing.value = row.claim_id
   try {
     await reviewClaim(row.claim_id, action, note)
-    ElMessage.success(pass ? '已通过该申请' : '已驳回该申请')
+    ElMessage.success(
+      pass ? (clue ? '已采纳该线索' : '已通过该申请') : clue ? '已忽略该线索' : '已驳回该申请',
+    )
     await load()
   } catch (e) {
     ElMessage.error(e?.response?.data?.detail || e?.response?.data?.msg || '操作失败')
   } finally {
     reviewing.value = null
   }
+}
+
+function onKindChange() {
+  status.value = '待核验'
+  load()
 }
 
 onMounted(load)
@@ -84,11 +107,16 @@ onMounted(load)
         <div class="crumb">
           <span>管理端</span>
           <el-icon><ArrowRight /></el-icon>
-          <span>认领审核</span>
+          <span>认领与线索</span>
         </div>
-        <h1 class="page-title">认领审核</h1>
+        <h1 class="page-title">认领与线索</h1>
         <p class="page-sub">
-          核对用户填写的私密特征与发布者登记的「私密特征」是否吻合，决定通过或不通过。
+          <template v-if="isClue">
+            寻物帖收到的线索在这里核实。采纳后该寻物帖进入「认领中」，请线下联系失主与线索人核对物品。
+          </template>
+          <template v-else>
+            核对失主填写的私密特征与发布者登记的「私密特征」是否吻合，决定通过或不通过。
+          </template>
         </p>
       </div>
       <div class="head-actions">
@@ -98,10 +126,21 @@ onMounted(load)
       </div>
     </div>
 
+    <section class="panel kind-bar">
+      <div class="kind-tabs">
+        <button class="kind-tab" :class="{ on: kind === 'claim' }" @click="kind = 'claim'; onKindChange()">
+          <el-icon><DocumentChecked /></el-icon>认领申请
+        </button>
+        <button class="kind-tab" :class="{ on: kind === 'clue' }" @click="kind = 'clue'; onKindChange()">
+          <el-icon><ChatLineSquare /></el-icon>线索
+        </button>
+      </div>
+    </section>
+
     <div class="stat-grid">
       <div class="stat-card">
         <div class="stat-num">{{ stat.total }}</div>
-        <div class="stat-label">申请总数</div>
+        <div class="stat-label">{{ unitLabel }}总数</div>
       </div>
       <div class="stat-card">
         <div class="stat-num warn">{{ stat.pending }}</div>
@@ -109,25 +148,25 @@ onMounted(load)
       </div>
       <div class="stat-card">
         <div class="stat-num ok">{{ stat.passed }}</div>
-        <div class="stat-label">已通过</div>
+        <div class="stat-label">{{ isClue ? '已采纳' : '已通过' }}</div>
       </div>
       <div class="stat-card">
         <div class="stat-num no">{{ stat.rejected }}</div>
-        <div class="stat-label">未通过</div>
+        <div class="stat-label">{{ isClue ? '已忽略' : '未通过' }}</div>
       </div>
     </div>
 
     <section class="panel filter-bar">
       <el-radio-group v-model="status" @change="load">
         <el-radio-button value="待核验">待审核</el-radio-button>
-        <el-radio-button value="已通过">已通过</el-radio-button>
-        <el-radio-button value="已拒绝">未通过</el-radio-button>
+        <el-radio-button value="已通过">{{ isClue ? '已采纳' : '已通过' }}</el-radio-button>
+        <el-radio-button value="已拒绝">{{ isClue ? '已忽略' : '未通过' }}</el-radio-button>
         <el-radio-button value="all">全部</el-radio-button>
       </el-radio-group>
       <div class="search-wrap">
         <el-input
           v-model="keyword"
-          placeholder="搜索物品标题 / 申请人 / 特征"
+          :placeholder="isClue ? '搜索物品标题 / 线索人 / 线索内容' : '搜索物品标题 / 申请人 / 特征'"
           clearable
           @keyup.enter="load"
           @clear="load"
@@ -142,6 +181,8 @@ onMounted(load)
       <template v-if="shown.length">
         <article v-for="c in shown" :key="c.claim_id" class="claim-card">
           <div class="c-head">
+            <span v-if="c.kind === 'clue'" class="c-kind clue">线索</span>
+            <span v-else class="c-kind claim">认领</span>
             <span class="c-title">{{ c.item.title }}</span>
             <span class="c-tag" :style="{
               color: statusStyle(c.status).color,
@@ -155,17 +196,17 @@ onMounted(load)
             <span><el-icon><Location /></el-icon>{{ c.item.location }}</span>
             <span><el-icon><Clock /></el-icon>{{ String(c.created_at).slice(0, 16) }}</span>
             <span v-if="c.item.type" class="type">
-              {{ c.item.type === 'lost' ? '失物' : '招领' }}
+              {{ c.item.type === 'lost' ? '寻物帖' : '招领帖' }}
             </span>
           </div>
 
           <div class="cmp">
             <div class="cmp-box">
-              <span class="c-label">用户填写的核验特征</span>
+              <span class="c-label">{{ c.kind === 'clue' ? '提交的线索内容' : '用户填写的核验特征' }}</span>
               <p class="c-text">{{ c.answers }}</p>
             </div>
             <div class="cmp-box ref">
-              <span class="c-label">发布者登记的私密特征</span>
+              <span class="c-label">{{ c.kind === 'clue' ? '失主登记的特征（对照）' : '发布者登记的私密特征' }}</span>
               <p class="c-text">{{ c.item.private_features || '（发布者未填写，需人工判断）' }}</p>
             </div>
           </div>
@@ -176,7 +217,7 @@ onMounted(load)
               :loading="reviewing === c.claim_id"
               @click="doReview(c, 'approve')"
             >
-              <el-icon><Select /></el-icon>&nbsp;通过
+              <el-icon><Select /></el-icon>&nbsp;{{ c.kind === 'clue' ? '采纳线索' : '通过' }}
             </el-button>
             <el-button
               type="danger"
@@ -184,12 +225,12 @@ onMounted(load)
               :loading="reviewing === c.claim_id"
               @click="doReview(c, 'reject')"
             >
-              <el-icon><CloseBold /></el-icon>&nbsp;不通过
+              <el-icon><CloseBold /></el-icon>&nbsp;{{ c.kind === 'clue' ? '忽略' : '不通过' }}
             </el-button>
           </div>
           <div v-else class="c-done" :class="c.passed ? 'ok' : 'no'">
             <el-icon><component :is="c.passed ? 'CircleCheckFilled' : 'CircleCloseFilled'" /></el-icon>
-            <span>{{ c.passed ? '已通过' : '已驳回' }}</span>
+            <span>{{ c.passed ? (c.kind === 'clue' ? '已采纳' : '已通过') : (c.kind === 'clue' ? '已忽略' : '已驳回') }}</span>
             <span v-if="c.reviewed_at" class="c-time">{{ String(c.reviewed_at).slice(0, 16) }}</span>
             <span v-if="c.review_note" class="c-note">说明：{{ c.review_note }}</span>
           </div>
@@ -197,8 +238,10 @@ onMounted(load)
       </template>
       <div v-else-if="!loading" class="panel empty">
         <div class="empty-icon"><el-icon><Document /></el-icon></div>
-        <div>{{ status === '待核验' ? '暂无待审核的认领申请' : '没有符合条件申请' }}</div>
-        <div class="empty-sub">用户提交认领申请后会出现在这里。</div>
+        <div>{{ status === '待核验' ? `暂无待审核的${unitLabel}` : `没有符合条件的${unitLabel}` }}</div>
+        <div class="empty-sub">
+          {{ isClue ? '用户在寻物帖下提交线索后会出现在这里。' : '用户在招领帖提交认领申请后会出现在这里。' }}
+        </div>
       </div>
     </div>
   </div>
@@ -208,6 +251,61 @@ onMounted(load)
 .head-actions {
   display: flex;
   gap: 10px;
+}
+
+.kind-bar {
+  padding: 8px;
+  margin-bottom: 14px;
+}
+
+.kind-tabs {
+  display: flex;
+  gap: 6px;
+}
+
+.kind-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 38px;
+  padding: 0 18px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.kind-tab:hover {
+  background: #f5f6fb;
+  color: var(--ink-2);
+}
+
+.kind-tab.on {
+  color: var(--primary);
+  background: linear-gradient(90deg, #eef0ff, #f6f4ff);
+  border-color: #e3e2fb;
+}
+
+.c-kind {
+  flex: none;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 5px;
+}
+
+.c-kind.claim {
+  color: #1d4ed8;
+  background: #e8eeff;
+}
+
+.c-kind.clue {
+  color: #0e9384;
+  background: #e8f8f4;
 }
 
 .stat-num.warn {
