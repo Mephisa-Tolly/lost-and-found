@@ -480,12 +480,15 @@ def detail_signals(source: dict, cand: dict) -> dict:
         delta -= min(0.35 * len(conflict), 0.55)
         reasons.insert(0, "细节冲突：" + conflict[0].split("（")[0])
     if not hit and not conflict:
+        # 界面是给管理员看的，称谓用「失物帖 / 招领帖」而不是「你 / 对方」
+        src_label = "失物帖" if source.get("type") == "lost" else "招领帖"
+        cand_label = "招领帖" if src_label == "失物帖" else "失物帖"
         if only_src and only_cand:
-            reasons.append(f"细节待核对：你写了「{_detail_core(only_src[0])}」，对方写了「{_detail_core(only_cand[0])}」")
+            reasons.append(f"细节待核对：{src_label}写了「{_detail_core(only_src[0])}」，{cand_label}写了「{_detail_core(only_cand[0])}」")
         elif only_src:
-            reasons.append(f"细节待核对：你写了「{_detail_core(only_src[0])}」，对方未提及")
+            reasons.append(f"细节待核对：{src_label}写了「{_detail_core(only_src[0])}」，{cand_label}未提及")
         elif only_cand:
-            reasons.append(f"细节待核对：对方写了「{_detail_core(only_cand[0])}」，你未提及")
+            reasons.append(f"细节待核对：{cand_label}写了「{_detail_core(only_cand[0])}」，{src_label}未提及")
     if color_note:
         reasons.append(color_note)
 

@@ -175,14 +175,6 @@ async function submitClaim() {
             <el-button v-else size="large" class="block" @click="openAction">
               <el-icon><ChatLineSquare /></el-icon>&nbsp;此物品我知晓线索，提交线索
             </el-button>
-            <p class="action-tip">
-              <template v-if="isLost">
-                AI 只给出候选，不判定归属。如果你看到或捡到了这件东西，可以直接提交线索，由管理员核实后联系失主。
-              </template>
-              <template v-else>
-                AI 只给出候选，不判定归属。确认候选后仍需私密特征核验与管理员二次核验。
-              </template>
-            </p>
           </section>
 
           <section class="panel flow-card">

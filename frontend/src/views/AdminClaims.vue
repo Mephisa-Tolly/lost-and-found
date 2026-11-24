@@ -58,7 +58,7 @@ async function doReview(row, action) {
     const r = await ElMessageBox.prompt(
       pass
         ? clue
-          ? `采纳「${row.applicant}」对《${row.item.title}》提交的线索？采纳后该寻物帖进入「认领中」，请线下联系双方核对物品。`
+          ? `采纳「${row.applicant}」对《${row.item.title}》提交的线索？采纳后该线索会转发给发布失物帖的用户，由其自行判断是否接受。`
           : `确认「${row.applicant}」对《${row.item.title}》的认领申请通过？通过后该物品标记为已确认，同物品的其他待审申请自动作废。`
         : clue
           ? `忽略「${row.applicant}」提交的线索？请填写原因，用户会在「我的申请」里看到。`
@@ -110,14 +110,6 @@ onMounted(load)
           <span>认领与线索</span>
         </div>
         <h1 class="page-title">认领与线索</h1>
-        <p class="page-sub">
-          <template v-if="isClue">
-            寻物帖收到的线索在这里核实。采纳后该寻物帖进入「认领中」，请线下联系失主与线索人核对物品。
-          </template>
-          <template v-else>
-            核对失主填写的私密特征与发布者登记的「私密特征」是否吻合，决定通过或不通过。
-          </template>
-        </p>
       </div>
       <div class="head-actions">
         <el-button plain :loading="loading" @click="load">
@@ -202,7 +194,7 @@ onMounted(load)
 
           <div class="cmp">
             <div class="cmp-box">
-              <span class="c-label">{{ c.kind === 'clue' ? '提交的线索内容' : '用户填写的核验特征' }}</span>
+              <span class="c-label">{{ c.kind === 'clue' ? '申请者提交的线索内容' : '申请者填写的核验特征' }}</span>
               <p class="c-text">{{ c.answers }}</p>
             </div>
             <div class="cmp-box ref">

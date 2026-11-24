@@ -2,7 +2,7 @@
 import { computed, ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox, ElMessage } from 'element-plus'
-import request, { API_BASE } from '@/api/request'
+import request from '@/api/request'
 import { useAuthStore } from '@/store/auth'
 
 const route = useRoute()
@@ -47,10 +47,7 @@ const aiTip = computed(() => {
   return lines.join('\n')
 })
 
-// 顶栏接口标签：点开是 FastAPI 自带的 Swagger 文档（以前只是个不可点的假标签，点了必 404）
-const docsUrl = API_BASE.startsWith('http')
-  ? `${API_BASE.replace(/\/api\/v1\/?$/, '')}/docs`
-  : '/docs'
+// 顶栏接口文档入口已移除（成品系统不向用户暴露开发者文档）
 
 const navGroups = computed(() => {
   if (auth.isAdmin) {
@@ -122,7 +119,6 @@ async function handleLogout() {
         </div>
         <div class="brand-text">
           <div class="brand-name">失物招领</div>
-          <div class="brand-sub">Campus Match · V3.0</div>
         </div>
       </div>
 
@@ -159,15 +155,6 @@ async function handleLogout() {
           <span class="topbar-title">{{ currentTitle }}</span>
         </div>
         <div class="topbar-right">
-          <a
-            class="pill pill-api"
-            :href="docsUrl"
-            target="_blank"
-            rel="noopener"
-            title="打开接口文档（Swagger）"
-          >
-            <el-icon><Document /></el-icon> 接口文档
-          </a>
           <el-tooltip :content="aiTip" placement="bottom">
             <div class="pill" :class="aiEnabled ? 'pill-ai-on' : 'pill-ai-off'">
               <span class="ai-dot" /> {{ aiLabel }}

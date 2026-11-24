@@ -229,3 +229,15 @@ export function fetchAdminClaims(params = {}) {
 export function reviewClaim(claimId, action, note = '') {
   return request.post(`/admin/claims/${claimId}/review`, { action, note })
 }
+
+/* ============ 消息通知（线索转发等） ============ */
+
+/** 当前用户收到的消息 */
+export function fetchMyNotifications() {
+  return request.get('/notifications/mine')
+}
+
+/** 全部标记为已读 */
+export function readAllNotifications() {
+  return request.post('/notifications/read-all')
+}

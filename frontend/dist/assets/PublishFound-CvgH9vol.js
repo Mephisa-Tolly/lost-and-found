@@ -1,0 +1,1 @@
+import{P as o}from"./PublishForm-BEfLwqj4.js";import{a as r,i as t}from"./index-D46fRMD3.js";import"./items-Cdl-WCAr.js";import"./items-oghn-PW8.js";import"./dict-C4YsAk1v.js";const u={__name:"PublishFound",setup(e){return(p,a)=>(r(),t(o,{type:"found"}))}};export{u as default};

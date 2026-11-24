@@ -94,6 +94,11 @@ async function onIgnore(c) {
 function goDetail() {
   router.push(`/items/${route.params.id}`)
 }
+
+// 管理员从「待确认匹配」点进来，返回应回到待确认匹配列表，而不是信息池
+function goBack() {
+  router.push(isAdmin.value ? '/matches' : '/items')
+}
 </script>
 
 <template>
@@ -101,21 +106,16 @@ function goDetail() {
     <div class="page-head">
       <div>
         <div class="crumb">
-          <span class="link" @click="router.push('/items')">信息池</span>
+          <span class="link" @click="goBack">{{ isAdmin ? '待确认匹配' : '信息池' }}</span>
           <el-icon><ArrowRight /></el-icon>
           <span class="link" @click="goDetail">物品详情</span>
           <el-icon><ArrowRight /></el-icon>
           <span>匹配结果</span>
         </div>
         <h1 class="page-title">AI 匹配结果{{ isAdmin ? '与人工确认' : '' }}</h1>
-        <p class="page-sub">
-          系统已按类别、地点、时间窗硬过滤，再由同义词归一与语义通道排序。候选仅供参考，{{
-            isAdmin ? '归属由你确认。' : '最终确认由管理员完成，你可以先浏览候选。'
-          }}
-        </p>
       </div>
-      <el-button plain @click="goDetail">
-        <el-icon><Back /></el-icon>&nbsp;返回详情
+      <el-button plain @click="goBack">
+        <el-icon><Back /></el-icon>&nbsp;{{ isAdmin ? '返回待确认匹配' : '返回信息池' }}
       </el-button>
     </div>
 
@@ -198,17 +198,7 @@ function goDetail() {
       :closable="false"
       show-icon
       title="已完成人工确认"
-      description="确认只表示你知道这条候选存在，不代表系统判定归属。正式认领仍需私密特征核验、拾得者确认与管理员二次核验。"
     />
-    <div v-else class="foot-note">
-      <el-icon><InfoFilled /></el-icon>
-      <template v-if="isAdmin">
-        AI 只负责召回与排序，不输出归属结论；相似度按高 / 中 / 低分级呈现，不代表匹配概率。
-      </template>
-      <template v-else>
-        AI 只负责召回与排序，不输出归属结论；确认匹配由管理员在管理端完成，如确认是你的物品，可到详情页提交认领申请。
-      </template>
-    </div>
   </div>
 </template>
 

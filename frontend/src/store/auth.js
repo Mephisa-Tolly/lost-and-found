@@ -1,6 +1,6 @@
 /**
  * 登录态（V3.0）
- * 两个演示账号：user/user123（普通用户）、admin/admin123（管理员）
+ * 账号由用户在登录页自行注册（管理员身份需验证码），不再内置演示账号。
  * token 由后端签名，存在 localStorage，请求头带 Authorization: Bearer <token>
  */
 import { defineStore } from 'pinia'

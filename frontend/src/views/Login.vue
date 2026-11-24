@@ -2,18 +2,49 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import request from '@/api/request'
 import { useAuthStore } from '@/store/auth'
 
 const router = useRouter()
 const auth = useAuthStore()
 
+const mode = ref('login') // login | register
 const form = ref({ username: '', password: '' })
+const regForm = ref({ username: '', password: '', confirm: '', role: 'user', admin_code: '' })
 const formRef = ref()
-const tips = ref(false)
+const regFormRef = ref()
+const regLoading = ref(false)
 
 const rules = {
   username: [{ required: true, message: '请输入账号', trigger: 'blur' }],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
+}
+
+const regRules = {
+  username: [
+    { required: true, message: '请输入用户名', trigger: 'blur' },
+    { min: 2, max: 20, message: '用户名长度需为 2—20 个字符', trigger: 'blur' },
+  ],
+  password: [
+    { required: true, message: '请输入密码', trigger: 'blur' },
+    { min: 6, max: 64, message: '密码长度需为 6—64 位', trigger: 'blur' },
+  ],
+  confirm: [
+    { required: true, message: '请再次输入密码', trigger: 'blur' },
+    {
+      validator: (r, v, cb) => cb(v === regForm.value.password ? undefined : new Error('两次输入的密码不一致')),
+      trigger: 'blur',
+    },
+  ],
+  admin_code: [
+    {
+      validator: (r, v, cb) => {
+        if (regForm.value.role === 'admin' && !(v || '').trim()) cb(new Error('注册管理员需要验证码'))
+        else cb()
+      },
+      trigger: 'blur',
+    },
+  ],
 }
 
 async function submit() {
@@ -28,11 +59,29 @@ async function submit() {
   }
 }
 
-// 演示账号快捷填充：课堂验收方便，真实部署可删掉这一段
-function fill(role) {
-  form.value = role === 'admin'
-    ? { username: 'admin', password: 'admin123' }
-    : { username: 'user', password: 'user123' }
+async function submitRegister() {
+  const valid = await regFormRef.value?.validate().catch(() => false)
+  if (!valid) return
+  regLoading.value = true
+  try {
+    await request.post('/auth/register', {
+      username: regForm.value.username.trim(),
+      password: regForm.value.password,
+      role: regForm.value.role,
+      admin_code: regForm.value.admin_code.trim(),
+    })
+    ElMessage.success('注册成功，请登录')
+    form.value = { username: regForm.value.username.trim(), password: '' }
+    mode.value = 'login'
+  } catch (e) {
+    /* 错误提示由请求拦截器统一弹出 */
+  } finally {
+    regLoading.value = false
+  }
+}
+
+function switchMode(m) {
+  mode.value = m
 }
 
 onMounted(() => {
@@ -49,51 +98,78 @@ onMounted(() => {
         </div>
         <div>
           <div class="brand-name">校园智能失物招领</div>
-          <div class="brand-sub">Campus Lost &amp; Found · V3.0</div>
         </div>
       </div>
 
-      <h2 class="title">登录</h2>
-      <p class="sub">使用你的账号登录，系统将按角色进入对应界面</p>
+      <template v-if="mode === 'login'">
+        <h2 class="title">登录</h2>
 
-      <el-form ref="formRef" :model="form" :rules="rules" size="large" @submit.prevent="submit">
-        <el-form-item prop="username">
-          <el-input v-model="form.username" placeholder="账号" clearable @keyup.enter="submit">
-            <template #prefix><el-icon><User /></el-icon></template>
-          </el-input>
-        </el-form-item>
-        <el-form-item prop="password">
-          <el-input
-            v-model="form.password"
-            type="password"
-            placeholder="密码"
-            show-password
-            @keyup.enter="submit"
-          >
-            <template #prefix><el-icon><Lock /></el-icon></template>
-          </el-input>
-        </el-form-item>
-        <el-button type="primary" class="submit" :loading="auth.loading" @click="submit">
-          登 录
-        </el-button>
-      </el-form>
+        <el-form ref="formRef" :model="form" :rules="rules" size="large" @submit.prevent="submit">
+          <el-form-item prop="username">
+            <el-input v-model="form.username" placeholder="账号" clearable @keyup.enter="submit">
+              <template #prefix><el-icon><User /></el-icon></template>
+            </el-input>
+          </el-form-item>
+          <el-form-item prop="password">
+            <el-input
+              v-model="form.password"
+              type="password"
+              placeholder="密码"
+              show-password
+              @keyup.enter="submit"
+            >
+              <template #prefix><el-icon><Lock /></el-icon></template>
+            </el-input>
+          </el-form-item>
+          <el-button type="primary" class="submit" :loading="auth.loading" @click="submit">
+            登 录
+          </el-button>
+        </el-form>
 
-      <div class="foot">
-        <span class="link" @click="tips = !tips">去注册</span>
-        <span class="tip">（演示系统暂未开放注册）</span>
-      </div>
-
-      <div v-if="tips" class="demo">
-        <div class="demo-title">演示账号（点击自动填入）</div>
-        <div class="demo-row">
-          <el-button size="small" plain @click="fill('user')">用户 user / user123</el-button>
-          <el-button size="small" plain @click="fill('admin')">管理员 admin / admin123</el-button>
+        <div class="foot">
+          还没有账号？<span class="link" @click="switchMode('register')">去注册</span>
         </div>
-        <div class="demo-hint">
-          用户端：发布失物 / 招领、浏览广场、查看 AI 匹配结果（只读）。<br />
-          管理端：信息管理、确认匹配、认领审核。
+      </template>
+
+      <template v-else>
+        <h2 class="title">注册</h2>
+
+        <el-form ref="regFormRef" :model="regForm" :rules="regRules" size="large" @submit.prevent="submitRegister">
+          <el-form-item prop="username">
+            <el-input v-model="regForm.username" placeholder="用户名（2—20 个字符）" clearable>
+              <template #prefix><el-icon><User /></el-icon></template>
+            </el-input>
+          </el-form-item>
+          <el-form-item prop="password">
+            <el-input v-model="regForm.password" type="password" placeholder="密码（至少 6 位）" show-password>
+              <template #prefix><el-icon><Lock /></el-icon></template>
+            </el-input>
+          </el-form-item>
+          <el-form-item prop="confirm">
+            <el-input v-model="regForm.confirm" type="password" placeholder="确认密码" show-password>
+              <template #prefix><el-icon><Lock /></el-icon></template>
+            </el-input>
+          </el-form-item>
+          <el-form-item label="注册身份">
+            <el-radio-group v-model="regForm.role">
+              <el-radio-button value="user">普通用户</el-radio-button>
+              <el-radio-button value="admin">管理员</el-radio-button>
+            </el-radio-group>
+          </el-form-item>
+          <el-form-item v-if="regForm.role === 'admin'" prop="admin_code">
+            <el-input v-model="regForm.admin_code" placeholder="管理员验证码" clearable>
+              <template #prefix><el-icon><Key /></el-icon></template>
+            </el-input>
+          </el-form-item>
+          <el-button type="primary" class="submit" :loading="regLoading" @click="submitRegister">
+            注 册
+          </el-button>
+        </el-form>
+
+        <div class="foot">
+          已有账号？<span class="link" @click="switchMode('login')">去登录</span>
         </div>
-      </div>
+      </template>
     </div>
   </div>
 </template>
@@ -143,22 +219,10 @@ onMounted(() => {
   color: var(--ink);
 }
 
-.brand-sub {
-  font-size: 11.5px;
-  color: var(--muted);
-  margin-top: 2px;
-}
-
 .title {
   font-size: 23px;
   font-weight: 720;
   color: var(--ink);
-  margin: 0 0 6px;
-}
-
-.sub {
-  font-size: 12.5px;
-  color: var(--muted);
   margin: 0 0 20px;
 }
 
@@ -174,43 +238,13 @@ onMounted(() => {
   margin-top: 16px;
   text-align: center;
   font-size: 12.5px;
+  color: var(--muted);
 }
 
 .link {
   color: var(--primary);
   cursor: pointer;
   font-weight: 600;
-}
-
-.tip {
-  color: #b6c0d0;
-}
-
-.demo {
-  margin-top: 14px;
-  padding: 12px 14px;
-  border-radius: 11px;
-  background: #f7f9fe;
-  border: 1px dashed #d9e2f5;
-}
-
-.demo-title {
-  font-size: 12px;
-  color: var(--muted);
-  margin-bottom: 8px;
-}
-
-.demo-row {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.demo-hint {
-  font-size: 11.5px;
-  color: #98a2b3;
-  margin-top: 8px;
-  line-height: 1.6;
 }
 
 @media (max-width: 480px) {

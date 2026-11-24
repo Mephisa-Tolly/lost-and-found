@@ -92,9 +92,6 @@ onMounted(load)
           <span>全部信息帖</span>
         </div>
         <h1 class="page-title">广场</h1>
-        <p class="page-sub">
-          这里可以看到全校用户发布的失物与招领信息，默认最新发布排在最上面。
-        </p>
       </div>
       <div class="head-actions">
         <el-button plain @click="router.push('/publish/found')">

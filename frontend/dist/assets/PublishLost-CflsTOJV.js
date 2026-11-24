@@ -1,0 +1,1 @@
+import{P as o}from"./PublishForm-BEfLwqj4.js";import{a as t,i as r}from"./index-D46fRMD3.js";import"./items-Cdl-WCAr.js";import"./items-oghn-PW8.js";import"./dict-C4YsAk1v.js";const l={__name:"PublishLost",setup(s){return(e,p)=>(t(),r(o,{type:"lost"}))}};export{l as default};

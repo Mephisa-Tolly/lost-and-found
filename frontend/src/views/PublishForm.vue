@@ -186,9 +186,6 @@ function goList() {
           <span>发布{{ word }}</span>
         </div>
         <h1 class="page-title">发布{{ word }}信息</h1>
-        <p class="page-sub">
-          填写结构化字段后，系统会自动与信息池中的存量记录做双向比对，命中即推送 Top-3 候选。
-        </p>
       </div>
       <el-button plain @click="router.push('/items')">
         <el-icon><Files /></el-icon>&nbsp;返回信息池
@@ -350,12 +347,12 @@ function goList() {
         <div class="tip-card">
           <div class="tip-icon"><el-icon><MagicStick /></el-icon></div>
           <h3>发布后会自动匹配</h3>
-          <p>系统先按类别、地点、时间窗做结构化硬过滤，再用同义词归一与语义通道排序，返回 Top-3 候选。</p>
+          <p>提交后，系统会自动在已有的失物和招领信息里查找可能相关的帖子，并把最相近的几条列给你。</p>
         </div>
         <div class="tip-card">
           <div class="tip-icon amber"><el-icon><View /></el-icon></div>
           <h3>匹配结果你也能看</h3>
-          <p>发布后可在广场点「匹配」查看候选；归属确认由管理员在管理端完成，你无需操作，也不会误判。</p>
+          <p>发布后在帖子的「匹配」页面就能看到这些候选；最终是否匹配成功由管理员确认，你不需要额外操作。</p>
         </div>
         <div class="tip-card">
           <div class="tip-icon rose"><el-icon><Lock /></el-icon></div>

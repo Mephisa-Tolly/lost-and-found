@@ -29,9 +29,6 @@ onMounted(async () => {
           <span>待确认匹配</span>
         </div>
         <h1 class="page-title">待确认匹配</h1>
-        <p class="page-sub">
-          系统已为下列记录生成候选，均需人工确认。AI 只排序，不判定归属。
-        </p>
       </div>
     </div>
 

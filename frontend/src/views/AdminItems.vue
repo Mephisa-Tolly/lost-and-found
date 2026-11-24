@@ -125,9 +125,6 @@ function parseImages(row) {
           <span>信息管理</span>
         </div>
         <h1 class="page-title">信息管理</h1>
-        <p class="page-sub">
-          查看并清理全部信息帖。删除会连带移除该信息的匹配候选与认领申请，操作不可恢复。
-        </p>
       </div>
       <div class="head-actions">
         <el-button

@@ -5,12 +5,13 @@
  */
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { fetchMyClaims } from '@/api/items'
+import { fetchMyClaims, fetchMyNotifications, readAllNotifications } from '@/api/items'
 
 const router = useRouter()
 const list = ref([])
 const stat = ref({ total: 0, pending: 0, passed: 0, rejected: 0 })
 const loading = ref(false)
+const notices = ref([])
 
 const filter = ref('all') // all | 待核验 | 已通过 | 已拒绝
 
@@ -40,7 +41,20 @@ async function load() {
   }
 }
 
-onMounted(load)
+async function loadNotices() {
+  try {
+    const data = await fetchMyNotifications()
+    notices.value = data.list || []
+    if ((data.unread || 0) > 0) await readAllNotifications()
+  } catch (e) {
+    notices.value = []
+  }
+}
+
+onMounted(() => {
+  load()
+  loadNotices()
+})
 </script>
 
 <template>
@@ -54,7 +68,7 @@ onMounted(load)
         </div>
         <h1 class="page-title">我的申请</h1>
         <p class="page-sub">
-          这里是你提交过的认领申请与线索。管理员处理后会显示结果，认领通过即表示物品归你。
+          这里是你提交过的认领申请与线索，管理员处理后会显示结果。
         </p>
       </div>
       <div class="head-actions">
@@ -63,6 +77,20 @@ onMounted(load)
         </el-button>
       </div>
     </div>
+
+    <section v-if="notices.length" class="panel notice-panel">
+      <div class="panel-head">
+        <h2 class="panel-title">
+          <el-icon><Bell /></el-icon>&nbsp;消息
+        </h2>
+      </div>
+      <div class="notice-list">
+        <div v-for="n in notices" :key="n.notification_id" class="notice-row">
+          <p class="notice-text">{{ n.content }}</p>
+          <span class="notice-time">{{ String(n.created_at).slice(0, 16) }}</span>
+        </div>
+      </div>
+    </section>
 
     <div class="stat-grid">
       <div class="stat-card">
@@ -155,6 +183,41 @@ onMounted(load)
 .head-actions {
   display: flex;
   gap: 10px;
+}
+
+.notice-panel {
+  margin-bottom: 14px;
+  padding-bottom: 8px;
+}
+
+.notice-list {
+  padding: 0 18px;
+}
+
+.notice-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 10px 2px;
+}
+
+.notice-row + .notice-row {
+  border-top: 1px dashed var(--line-strong);
+}
+
+.notice-text {
+  flex: 1;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #3f4a5f;
+  word-break: break-word;
+}
+
+.notice-time {
+  flex: none;
+  font-size: 11.5px;
+  color: #98a2b3;
 }
 
 .c-kind {

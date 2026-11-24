@@ -93,17 +93,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ==================== 简易登录与权限（V3.0 新增） ====================
-# 课程 Demo 的定位：不做注册、不做密码找回，只提供「用户 / 管理员」两个演示账号，
-# 用来演示两种角色看到的界面和能做的操作不同。
-# 口令不写死在代码里：可用环境变量 AUTH_USER_PASS / AUTH_ADMIN_PASS 覆盖，
-# 默认值仅用于课堂演示，真实部署请改掉。
-_ADMIN_USER = os.getenv("AUTH_ADMIN_USER", "admin")
-_ADMIN_PASS = os.getenv("AUTH_ADMIN_PASS", "admin123")
-_USER_USER = os.getenv("AUTH_USER_USER", "user")
-_USER_PASS = os.getenv("AUTH_USER_PASS", "user123")
+# ==================== 注册 / 登录与权限 ====================
+# 账号落库（users 表），密码只存加盐哈希，不存明文。
+# 注册管理员身份需要额外验证码（环境变量 ADMIN_REG_CODE 可覆盖，默认 laf）。
+_ADMIN_REG_CODE = os.getenv("ADMIN_REG_CODE", "laf")
 
-# token 无状态签名（不落库），进程重启后旧 token 失效——课堂上重新登录即可
+# token 无状态签名（不落库），进程重启后旧 token 失效——重新登录即可
 _SECRET = os.getenv("AUTH_SECRET", "campus-lostfound-v3-demo-secret")
 
 
@@ -150,21 +145,89 @@ class LoginReq(BaseModel):
     password: str
 
 
+class RegisterReq(BaseModel):
+    username: str
+    password: str
+    role: str = "user"               # user | admin
+    admin_code: Optional[str] = ""   # 注册管理员时必填的验证码
+
+
+def _hash_password(password: str, salt: str) -> str:
+    return hashlib.sha256(f"{salt}:{password}".encode("utf-8")).hexdigest()
+
+
+def _db_find_user(username: str) -> Optional[dict]:
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT user_id, username, password_hash, role FROM users WHERE username = ?",
+            (username,)).fetchone()
+        return dict(row) if row else None
+    except sqlite3.OperationalError:
+        return None
+    finally:
+        conn.close()
+
+
+_ROLE_NAME = {"admin": "管理员", "user": "普通用户",
+              "owner": "普通用户", "finder": "普通用户", "security": "管理员"}
+
+
+def _login_role(db_role: str) -> str:
+    """库里的历史角色（owner/finder/security）归一到前端认识的 user/admin"""
+    return "admin" if db_role in ("admin", "security") else "user"
+
+
+@app.post("/api/v1/auth/register")
+def auth_register(req: RegisterReq):
+    """真实注册：用户名唯一；注册管理员需额外输入验证码"""
+    u = (req.username or "").strip()
+    p = (req.password or "").strip()
+    role = "admin" if (req.role or "").strip().lower() == "admin" else "user"
+    if not (2 <= len(u) <= 20):
+        return api_response(400, "用户名长度需为 2—20 个字符")
+    if not all(ch.isalnum() or ch in "_-" for ch in u):
+        return api_response(400, "用户名只能包含中英文、数字、下划线和短横线")
+    if not (6 <= len(p) <= 64):
+        return api_response(400, "密码长度需为 6—64 位")
+    if role == "admin":
+        if (req.admin_code or "").strip() != _ADMIN_REG_CODE:
+            return api_response(400, "管理员验证码不正确")
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT user_id FROM users WHERE username = ?", (u,))
+        if cur.fetchone():
+            return api_response(409, "该用户名已被注册")
+        salt = uuid.uuid4().hex[:16]
+        cur.execute("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
+                    (u, f"{salt}${_hash_password(p, salt)}", role))
+        conn.commit()
+        return api_response(200, "注册成功，请登录", {"username": u, "role": role})
+    except sqlite3.IntegrityError:
+        conn.rollback()
+        return api_response(409, "该用户名已被注册")
+    except Exception as e:
+        conn.rollback()
+        return api_response(500, f"系统异常: {str(e)}")
+    finally:
+        conn.close()
+
+
 @app.post("/api/v1/auth/login")
 def auth_login(req: LoginReq, authorization: Optional[str] = Header(None)):
     """登录。前端拿到 token 存在 localStorage，后续请求带 Authorization: Bearer <token>"""
     u = (req.username or "").strip()
     p = (req.password or "").strip()
-    if u == _ADMIN_USER and p == _ADMIN_PASS:
-        return api_response(200, "登录成功", {
-            "token": _make_token(u, "admin"), "username": u, "role": "admin",
-            "role_name": "管理员",
-        })
-    if u == _USER_USER and p == _USER_PASS:
-        return api_response(200, "登录成功", {
-            "token": _make_token(u, "user"), "username": u, "role": "user",
-            "role_name": "普通用户",
-        })
+    row = _db_find_user(u)
+    if row:
+        salt, _, want = str(row["password_hash"]).partition("$")
+        if want and _hash_password(p, salt) == want:
+            role = _login_role(row["role"])
+            return api_response(200, "登录成功", {
+                "token": _make_token(u, role), "username": u, "role": role,
+                "role_name": _ROLE_NAME.get(row["role"], "普通用户"),
+            })
     return api_response(401, "账号或密码不正确")
 
 
@@ -233,6 +296,34 @@ def ensure_db():
                     conn.execute(ddl)
                     print(f"[DB] 已补充 claims.{name} 字段")
             conn.commit()
+
+        # 老库的 users 表角色 CHECK 不含 'user'，注册普通用户会被拒：重建该表（保留已有账号）
+        try:
+            usql = conn.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").fetchone()
+            if usql and "'user'" not in (usql[0] or ""):
+                conn.execute("""CREATE TABLE users_new (
+                                    user_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                    username VARCHAR(50) NOT NULL UNIQUE,
+                                    password_hash VARCHAR(128) NOT NULL,
+                                    role VARCHAR(20) NOT NULL CHECK(role IN ('user','owner','finder','admin','security')),
+                                    anonymous_flag BOOLEAN NOT NULL DEFAULT 0,
+                                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)""")
+                conn.execute("""INSERT INTO users_new (user_id, username, password_hash, role, anonymous_flag, created_at)
+                                SELECT user_id, username, password_hash, role, anonymous_flag, created_at FROM users""")
+                conn.execute("DROP TABLE users")
+                conn.execute("ALTER TABLE users_new RENAME TO users")
+                conn.commit()
+                print("[DB] 已重建 users 表以支持普通用户注册")
+        except Exception as e:
+            print(f"[DB] users 表迁移跳过：{e}")
+
+        # items 表补发布者用户名：线索采纳后据此转发消息给失主
+        icols = [r[1] for r in conn.execute("PRAGMA table_info(items)")]
+        if icols and "created_by_name" not in icols:
+            conn.execute("ALTER TABLE items ADD COLUMN created_by_name VARCHAR(50) DEFAULT ''")
+            conn.commit()
+            print("[DB] 已补充 items.created_by_name 字段")
         try:
             conn.execute("UPDATE items SET sensitive_level='normal' WHERE sensitive_level IN ('0','','0.0')")
             conn.execute("UPDATE items SET sensitive_level='sensitive' WHERE sensitive_level IN ('1','1.0')")
@@ -690,11 +781,19 @@ def detect_sensitive(category: str, title: str = "", description: str = "") -> s
 # --- 接口实现 ---
 
 @app.post("/api/v1/items")
-def create_item(item: ItemCreate):
+def create_item(item: ItemCreate, authorization: Optional[str] = Header(None)):
     """发布失物招领信息"""
+    me = _current_user(authorization) or {}
+    publisher_name = (me.get("username") or "").strip()
     conn = get_db()
     cursor = conn.cursor()
     try:
+        # 发布者用户名落库：线索被采纳后要据此把消息转发给失主
+        if publisher_name:
+            cursor.execute("SELECT user_id FROM users WHERE username = ?", (publisher_name,))
+            urow = cursor.fetchone()
+            if urow:
+                item.created_by = urow["user_id"]
         # 自动识别敏感物品（校园卡/银行卡/钥匙）
         sensitive = detect_sensitive(item.category, item.title, item.description)
         # 图片落盘，库里只存短路径；库表保持轻量，列表接口不会因为图片变成几 MB
@@ -709,11 +808,11 @@ def create_item(item: ItemCreate):
         # contact_encrypted / private_features 只对管理员可见，列表与详情接口已做过滤
         cursor.execute("""
             INSERT INTO items (type, title, category, location, time, description, color, brand, images,
-                               anonymous, status, sensitive_level, contact_encrypted, private_features, created_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '待匹配', ?, ?, ?, ?)
-        """, (item.type, item.title, item.category, item.location, item.time, 
+                               anonymous, status, sensitive_level, contact_encrypted, private_features, created_by, created_by_name)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '待匹配', ?, ?, ?, ?, ?)
+        """, (item.type, item.title, item.category, item.location, item.time,
               item.description, item.color, item.brand, images_json, item.anonymous, sensitive,
-              item.contact or "", item.private_features or "", item.created_by))
+              item.contact or "", item.private_features or "", item.created_by, publisher_name))
         conn.commit()
         item_id = cursor.lastrowid
 
@@ -1244,7 +1343,8 @@ def create_claim(item_id: int, claim: ClaimCreate, authorization: Optional[str] 
     me = _current_user(authorization) or {}
     if me.get("role") == "admin":
         return api_response(400, "管理员账号不参与认领申请")
-    applicant_name = me.get("username") or "user"
+    # 申请人填写的昵称优先；没填则用登录用户名，保证管理端能看到称呼
+    applicant_name = (claim.applicant or "").strip() or me.get("username") or "user"
 
     kind = (claim.kind or "").strip().lower()
     if kind not in ("claim", "clue"):
@@ -1253,6 +1353,14 @@ def create_claim(item_id: int, claim: ClaimCreate, authorization: Optional[str] 
     conn = get_db()
     cursor = conn.cursor()
     try:
+        # 申请人 user_id：即使填了昵称，也能在「我的申请」里按账号找回记录
+        applicant_uid = 1
+        login_name = me.get("username") or ""
+        if login_name:
+            cursor.execute("SELECT user_id FROM users WHERE username = ?", (login_name,))
+            urow = cursor.fetchone()
+            if urow:
+                applicant_uid = urow["user_id"]
         cursor.execute("SELECT item_id, type, status FROM items WHERE item_id = ?", (item_id,))
         row = cursor.fetchone()
         if not row:
@@ -1267,17 +1375,18 @@ def create_claim(item_id: int, claim: ClaimCreate, authorization: Optional[str] 
             return api_response(400, "这是招领信息，只能申请认领，不能提交线索")
 
         # 同一用户对同一物品只保留一条待核验记录，避免连点提交出多条
+        # 按登录账号 user_id 判重，换个昵称也不能重复提交
         cursor.execute("""SELECT claim_id FROM claims
-                          WHERE item_id = ? AND applicant_name = ? AND kind = ? AND status = '待核验'""",
-                       (item_id, applicant_name, kind))
+                          WHERE item_id = ? AND applicant_id = ? AND kind = ? AND status = '待核验'""",
+                       (item_id, applicant_uid, kind))
         dup = cursor.fetchone()
         if dup:
             return api_response(200, "你已提交过，请等待管理员审核",
                                 {"claim_id": dup["claim_id"], "status": "待核验",
                                  "kind": kind, "duplicated": True})
         cursor.execute("""INSERT INTO claims (item_id, applicant_id, applicant_name, answers, kind, status)
-                          VALUES (?, 1, ?, ?, ?, '待核验')""",
-                       (item_id, applicant_name, claim.answers, kind))
+                          VALUES (?, ?, ?, ?, ?, '待核验')""",
+                       (item_id, applicant_uid, applicant_name, claim.answers, kind))
         conn.commit()
         return api_response(200, "线索已提交" if kind == "clue" else "认领申请已提交",
                             {"claim_id": cursor.lastrowid, "status": "待核验", "kind": kind})
@@ -1332,7 +1441,15 @@ def my_claims(authorization: Optional[str] = Header(None)):
         return api_response(401, "请先登录")
     conn = get_db()
     try:
-        rows = _claim_rows(conn, "WHERE c.applicant_name = ?", (me.get("username"),))
+        uid = 0
+        row = conn.execute("SELECT user_id FROM users WHERE username = ?",
+                           (me.get("username"),)).fetchone()
+        if row:
+            uid = row["user_id"]
+        # 兼容两种记录：applicant_id=登录账号（新）/ applicant_name=登录用户名（旧）
+        rows = _claim_rows(conn,
+                           "WHERE c.applicant_id = ? OR c.applicant_name = ?",
+                           (uid, me.get("username")))
         # 申请人自己不能看到物品的「私密特征」标准答案，否则核验形同虚设
         for r in rows:
             r.pop("private_features", None)
@@ -1387,7 +1504,7 @@ def review_claim(claim_id: int, body: ClaimReview,
     conn = get_db()
     try:
         cur = conn.cursor()
-        cur.execute("SELECT claim_id, item_id, status, kind FROM claims WHERE claim_id = ?", (claim_id,))
+        cur.execute("SELECT claim_id, item_id, status, kind, applicant_name, answers FROM claims WHERE claim_id = ?", (claim_id,))
         row = cur.fetchone()
         if not row:
             return api_response(404, "申请不存在")
@@ -1403,11 +1520,23 @@ def review_claim(claim_id: int, body: ClaimReview,
                      1 if action == "approve" else 0, claim_id))
         if action == "approve":
             if is_clue:
-                # 线索采纳：物品进入「认领中」，等待失主与线索人线下核对。
-                # 线索之间不存在互斥关系，不能像认领那样把其他线索一并作废。
+                # 线索采纳：管理员初步核对后，把线索转发给发布失物帖的失主，
+                # 由失主自己判断是否接受（用户端「我的申请」页可见），物品进入「认领中」。
                 cur.execute("""UPDATE items SET status = '认领中'
                                WHERE item_id = ? AND status IN ('待匹配', '已匹配')""",
                             (row["item_id"],))
+                cur.execute("SELECT title, created_by_name FROM items WHERE item_id = ?",
+                            (row["item_id"],))
+                it = cur.fetchone()
+                if it and (it["created_by_name"] or "").strip():
+                    owner = it["created_by_name"].strip()
+                    cur.execute("SELECT user_id FROM users WHERE username = ?", (owner,))
+                    urow = cur.fetchone()
+                    if urow:
+                        content = (f"您发布的失物帖「{it['title']}」得到了一条线索，请查看。"
+                                   f"线索来自「{row['applicant_name'] or '匿名用户'}」：{row['answers']}")
+                        cur.execute("""INSERT INTO notifications (user_id, type, content)
+                                       VALUES (?, 'clue', ?)""", (urow["user_id"], content))
             else:
                 # 认领通过后把物品标记为已认领，双向闭环
                 cur.execute("UPDATE items SET status = '已确认' WHERE item_id = ?", (row["item_id"],))
@@ -1425,6 +1554,50 @@ def review_claim(claim_id: int, body: ClaimReview,
     except Exception as e:
         conn.rollback()
         return api_response(500, f"系统异常: {str(e)}")
+    finally:
+        conn.close()
+
+
+# ==================== 用户消息通知（线索转发等） ====================
+@app.get("/api/v1/notifications/mine")
+def my_notifications(authorization: Optional[str] = Header(None)):
+    """当前用户收到的消息（如：管理员采纳线索后转发给失主的通知）"""
+    me = _current_user(authorization)
+    if not me:
+        return api_response(401, "请先登录")
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT user_id FROM users WHERE username = ?", (me.get("username"),))
+        urow = cur.fetchone()
+        if not urow:
+            return api_response(200, "success", {"total": 0, "unread": 0, "list": []})
+        cur.execute("""SELECT notification_id, type, content, read_flag, created_at
+                       FROM notifications WHERE user_id = ?
+                       ORDER BY datetime(created_at) DESC LIMIT 50""",
+                    (urow["user_id"],))
+        rows = [dict(r) for r in cur.fetchall()]
+        unread = len([r for r in rows if not r["read_flag"]])
+        return api_response(200, "success",
+                            {"total": len(rows), "unread": unread, "list": rows})
+    finally:
+        conn.close()
+
+
+@app.post("/api/v1/notifications/read-all")
+def read_all_notifications(authorization: Optional[str] = Header(None)):
+    """把当前用户的消息全部标记为已读"""
+    me = _current_user(authorization)
+    if not me:
+        return api_response(401, "请先登录")
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        cur.execute("""UPDATE notifications SET read_flag = 1
+                       WHERE user_id = (SELECT user_id FROM users WHERE username = ?)""",
+                    (me.get("username"),))
+        conn.commit()
+        return api_response(200, "已全部标为已读")
     finally:
         conn.close()
 

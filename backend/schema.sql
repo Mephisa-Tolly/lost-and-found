@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS users (
     user_id INTEGER PRIMARY KEY AUTOINCREMENT,
     username VARCHAR(50) NOT NULL UNIQUE,
     password_hash VARCHAR(128) NOT NULL,
-    role VARCHAR(20) NOT NULL CHECK(role IN ('owner', 'finder', 'admin', 'security')),
+    role VARCHAR(20) NOT NULL CHECK(role IN ('user', 'owner', 'finder', 'admin', 'security')),
     anonymous_flag BOOLEAN NOT NULL DEFAULT 0,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
